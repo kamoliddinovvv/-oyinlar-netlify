@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mening o'yinlarim</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--text:#1b1d2a;--mut:#6b7085;--acc:#5b5bf0;--bd:#e3e5ee}
+@media (prefers-color-scheme:dark){:root{--bg:#14151c;--card:#1e2029;--text:#eef0f8;--mut:#9a9fb5;--acc:#8a8aff;--bd:#2d3040}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,sans-serif}
+header{max-width:1000px;margin:0 auto;padding:28px 16px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+h1{margin:0}
+button{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:10px 16px;background:var(--acc);color:#fff;font-weight:600}
+button.ghost{background:transparent;color:var(--mut);border:1px solid var(--bd)}
+main{max-width:1000px;margin:0 auto;padding:8px 16px 40px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+.card img{width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--bd)}
+.b{padding:12px 14px;display:flex;flex-direction:column;gap:6px;flex:1}
+.b h3{margin:0}
+.tag{align-self:flex-start;font-size:.78rem;padding:2px 9px;border-radius:99px;background:var(--bd);color:var(--mut)}
+.play{margin-top:auto;text-align:center;text-decoration:none;background:var(--acc);color:#fff;padding:9px;border-radius:9px;font-weight:600}
+.del{background:transparent;color:#d33;padding:4px}
+dialog{border:1px solid var(--bd);border-radius:16px;background:var(--card);color:var(--text);width:min(420px,92vw);padding:20px}
+label{display:block;font-size:.85rem;color:var(--mut);margin:12px 0 4px}
+input[type=text],input[type=url],select{width:100%;padding:10px;border-radius:9px;border:1px solid var(--bd);background:var(--bg);color:var(--text);font:inherit}
+.row{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+#msg{color:#d33;font-size:.85rem;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎮 Mening o'yinlarim</h1>
+  <div>
+    <button class="ghost" id="loginBtn">Admin</button>
+    <button id="addBtn" style="display:none">+ O'yin qo'shish</button>
+  </div>
+</header>
+<main><div id="grid" class="grid"></div></main>
+
+<dialog id="dlg">
+  <h2 style="margin:0">Yangi o'yin</h2>
+  <label>O'yin nomi</label><input type="text" id="fTitle" maxlength="60">
+  <label>O'yin linki</label><input type="url" id="fUrl" placeholder="https://...">
+  <label>Qanday o'yin?</label>
+  <select id="fType"><option>Arcade</option><option>Jumboq</option><option>Strategiya</option><option>Poyga</option><option>Sarguzasht</option><option>Boshqa</option></select>
+  <label>Rasm</label><input type="file" id="fImg" accept="image/*">
+  <div id="msg"></div>
+  <div class="row"><button class="ghost" id="cancel">Bekor qilish</button><button id="save">Saqlash</button></div>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let games = [], pass = sessionStorage.getItem("pass") || "", img = "";
+
+async function api(method, url, body) {
+  const r = await fetch(url, { method, headers: { "Content-Type": "application/json", "x-admin": pass }, body: body ? JSON.stringify(body) : undefined });
+  if (!r.ok) throw new Error((await r.json()).error || "xato");
+  return r.json();
+}
+function render() {
+  const g = $("grid"); g.textContent = "";
+  if (!games.length) g.textContent = "Hozircha o'yin yo'q.";
+  games.forEach((it) => {
+    const c = document.createElement("div"); c.className = "card";
+    c.innerHTML = '<img><div class="b"><h3></h3><span class="tag"></span><a class="play" target="_blank" rel="noopener">▶ O\'ynash</a></div>';
+    c.querySelector("img").src = it.img; c.querySelector("h3").textContent = it.title;
+    c.querySelector(".tag").textContent = it.type; c.querySelector("a").href = it.url;
+    if (pass) {
+      const d = document.createElement("button"); d.className = "del"; d.textContent = "O'chirish";
+      d.onclick = async () => { if (confirm("O'chirilsinmi?")) { games = await api("DELETE", "/api/games/" + it.id); render(); } };
+      c.querySelector(".b").appendChild(d);
+    }
+    g.appendChild(c);
+  });
+}
+function shrink(file) {
+  return new Promise((res) => {
+    const r = new FileReader();
+    r.onload = () => { const im = new Image(); im.onload = () => {
+      const s = Math.min(1, 480 / Math.max(im.width, im.height)), cv = document.createElement("canvas");
+      cv.width = im.width * s; cv.height = im.height * s;
+      cv.getContext("2d").drawImage(im, 0, 0, cv.width, cv.height); res(cv.toDataURL("image/jpeg", 0.78));
+    }; im.src = r.result; };
+    r.readAsDataURL(file);
+  });
+}
+function showAdmin() { $("addBtn").style.display = pass ? "" : "none"; $("loginBtn").style.display = pass ? "none" : ""; render(); }
+$("loginBtn").onclick = async () => {
+  const p = prompt("Admin paroli:"); if (!p) return;
+  pass = p;
+  try { await api("POST", "/api/login"); sessionStorage.setItem("pass", p); } catch { pass = ""; alert("Parol xato"); }
+  showAdmin();
+};
+$("fImg").onchange = async (e) => { if (e.target.files[0]) img = await shrink(e.target.files[0]); };
+$("addBtn").onclick = () => { $("msg").textContent = ""; $("dlg").showModal(); };
+$("cancel").onclick = () => $("dlg").close();
+$("save").onclick = async () => {
+  try {
+    games = await api("POST", "/api/games", { title: $("fTitle").value.trim(), url: $("fUrl").value.trim(), type: $("fType").value, img });
+    $("dlg").close(); $("fTitle").value = $("fUrl").value = $("fImg").value = ""; img = ""; render();
+  } catch (e) { $("msg").textContent = e.message; }
+};
+api("GET", "/api/games").then((g) => { games = g; showAdmin(); });
+</script>
+</body>
+</html>
